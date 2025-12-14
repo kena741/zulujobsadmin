@@ -17,6 +17,8 @@ export interface CompanyEntity {
   is_owner?: boolean | null;
   is_verified?: boolean | null;
   request_verify?: boolean | null;
+  number_of_jobs_posted?: number | null;
+  hiring_rate?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -76,6 +78,8 @@ export interface Company {
   isOwner?: boolean | null;
   isVerified?: boolean | null;
   requestVerify?: boolean | null;
+  numberOfJobsPosted?: number | null;
+  hiringRate?: number | null;
   createdAt: string;
   updatedAt: string;
 }

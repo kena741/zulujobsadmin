@@ -73,7 +73,8 @@ export const updateApplicationStatus = createAsyncThunk(
           jobs (
             id,
             job_title,
-            company
+            company,
+            company_id
           ),
           freelancers (
             id,
@@ -84,6 +85,48 @@ export const updateApplicationStatus = createAsyncThunk(
         .single();
       
       if (error) throw error;
+      
+      // If status is 'hired', update hiring_rate for the company
+      if (status === 'hired' && data.jobs?.company_id) {
+        try {
+          // Get all jobs for this company
+          const { data: companyJobs, error: jobsError } = await supabase
+            .from('jobs')
+            .select('id')
+            .eq('company_id', data.jobs.company_id);
+          
+          if (!jobsError && companyJobs && companyJobs.length > 0) {
+            const jobIds = companyJobs.map(job => job.id);
+            
+            // Get all applications for all jobs from this company
+            const { data: allApplications, error: appsError } = await supabase
+              .from('applications')
+              .select('status')
+              .in('job_id', jobIds);
+            
+            if (!appsError && allApplications) {
+              const totalApplications = allApplications.length;
+              const hiredCount = allApplications.filter(app => app.status === 'hired').length;
+              const hiringRate = totalApplications > 0 ? Math.round((hiredCount / totalApplications) * 100) : 0;
+              
+              // Update hiring_rate for the company
+              const { error: updateError } = await supabase
+                .from('employers')
+                .update({ 
+                  hiring_rate: hiringRate,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', data.jobs.company_id);
+              
+              if (updateError) {
+                console.error('Failed to update hiring_rate:', updateError);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error updating hiring_rate:', error);
+        }
+      }
       
       return {
         id: data.id,

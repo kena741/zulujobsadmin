@@ -32,6 +32,8 @@ const mapCompanyFromDB = (entity: CompanyEntity): Company => {
     isOwner: entity.is_owner,
     isVerified: entity.is_verified,
     requestVerify: entity.request_verify || false,
+    numberOfJobsPosted: entity.number_of_jobs_posted || 0,
+    hiringRate: entity.hiring_rate || 0,
     createdAt: entity.created_at,
     updatedAt: entity.updated_at,
   };
