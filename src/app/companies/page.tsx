@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { fetchAllCompanies, verifyCompany, rejectCompany } from '@/features/company/companySlice';
 import { addNotification } from '@/features/ui/uiSlice';
@@ -14,6 +14,9 @@ export default function CompaniesPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'requesting' | 'others'>('all');
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [countryFilter, setCountryFilter] = useState<string>('all');
+  const [verificationFilter, setVerificationFilter] = useState<string>('all');
 
   useEffect(() => {
     dispatch(fetchAllCompanies());
@@ -58,20 +61,68 @@ export default function CompaniesPage() {
     setShowDetailModal(true);
   };
 
-  const filteredCompanies = companies.filter((company) => {
-    if (activeTab === 'requesting') return company.requestVerify === true && company.isVerified === false;
-    if (activeTab === 'others') return !(company.requestVerify === true && company.isVerified === false);
-    return true;
-  });
+  // Get unique countries for filter
+  const uniqueCountries = useMemo(() => {
+    const countries = companies
+      .map(c => c.country)
+      .filter((country): country is string => country !== null && country !== undefined && country.trim() !== '');
+    return Array.from(new Set(countries)).sort();
+  }, [companies]);
+
+  const filteredCompanies = useMemo(() => {
+    let filtered = companies.filter((company) => {
+      if (activeTab === 'requesting') return company.requestVerify === true && company.isVerified === false;
+      if (activeTab === 'others') return !(company.requestVerify === true && company.isVerified === false);
+      return true;
+    });
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(c => {
+        return (
+          c.companyName?.toLowerCase().includes(query) ||
+          c.email?.toLowerCase().includes(query) ||
+          c.country?.toLowerCase().includes(query) ||
+          c.tin?.toLowerCase().includes(query)
+        );
+      });
+    }
+
+    // Country filter
+    if (countryFilter !== 'all') {
+      filtered = filtered.filter(c => c.country === countryFilter);
+    }
+
+    // Verification filter
+    if (verificationFilter !== 'all') {
+      filtered = filtered.filter(c => {
+        switch (verificationFilter) {
+          case 'verified':
+            return c.isVerified === true;
+          case 'unverified':
+            return c.isVerified === false;
+          case 'requesting':
+            return c.requestVerify === true && c.isVerified === false;
+          default:
+            return true;
+        }
+      });
+    }
+
+    return filtered;
+  }, [companies, activeTab, searchQuery, countryFilter, verificationFilter]);
 
   // Sort: requesting verification first, then by creation date
-  const sortedCompanies = [...filteredCompanies].sort((a, b) => {
-    const aRequesting = a.requestVerify === true && a.isVerified === false;
-    const bRequesting = b.requestVerify === true && b.isVerified === false;
-    if (aRequesting && !bRequesting) return -1;
-    if (!aRequesting && bRequesting) return 1;
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  });
+  const sortedCompanies = useMemo(() => {
+    return [...filteredCompanies].sort((a, b) => {
+      const aRequesting = a.requestVerify === true && a.isVerified === false;
+      const bRequesting = b.requestVerify === true && b.isVerified === false;
+      if (aRequesting && !bRequesting) return -1;
+      if (!aRequesting && bRequesting) return 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [filteredCompanies]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -93,6 +144,74 @@ export default function CompaniesPage() {
         <Header title="Companies" />
         
         <main className="max-w-7xl mx-auto px-4 lg:px-6 py-6">
+          {/* Search and Filters */}
+          <div className="mb-6 bg-white rounded-xl shadow-md border border-gray-100 p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Search */}
+              <div className="md:col-span-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search by name, email, country..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                  <svg className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Country Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Country</label>
+                <select
+                  value={countryFilter}
+                  onChange={(e) => setCountryFilter(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="all">All Countries</option>
+                  {uniqueCountries.map(country => (
+                    <option key={country} value={country}>{country}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Verification Status Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Verification Status</label>
+                <select
+                  value={verificationFilter}
+                  onChange={(e) => setVerificationFilter(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="all">All Status</option>
+                  <option value="verified">Verified</option>
+                  <option value="unverified">Unverified</option>
+                  <option value="requesting">Requesting</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Clear Filters */}
+            {(searchQuery || countryFilter !== 'all' || verificationFilter !== 'all') && (
+              <div className="mt-4">
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCountryFilter('all');
+                    setVerificationFilter('all');
+                  }}
+                  className="text-sm text-purple-600 hover:text-purple-700 font-medium"
+                >
+                  Clear all filters
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Tabs */}
           <div className="mb-6 flex flex-wrap gap-3">
             {tabs.map((tab) => (
@@ -136,8 +255,12 @@ export default function CompaniesPage() {
                   <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                   </svg>
-                  <p className="text-lg font-medium">No companies found</p>
-                  <p className="text-sm mt-1">Try selecting a different tab</p>
+                  <p className="text-lg font-medium">
+                    {companies.length === 0 ? 'No companies found' : 'No companies match your filters'}
+                  </p>
+                  <p className="text-sm mt-1">
+                    {companies.length === 0 ? 'No companies in the database' : 'Try adjusting your search or filters'}
+                  </p>
                 </div>
               ) : (
                 sortedCompanies.map((company) => (

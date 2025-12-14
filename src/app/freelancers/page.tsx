@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import AuthGuard from '@/components/AuthGuard';
 import Header from '@/components/Header';
 import { supabase } from '@/lib/supabase';
@@ -61,6 +61,9 @@ export default function FreelancersPage() {
   const [loading, setLoading] = useState(true);
   const [selectedFreelancer, setSelectedFreelancer] = useState<Freelancer | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [profileCompletionFilter, setProfileCompletionFilter] = useState<string>('all');
+  const [locationFilter, setLocationFilter] = useState<string>('all');
 
   useEffect(() => {
     const fetchFreelancers = async () => {
@@ -95,12 +98,131 @@ export default function FreelancersPage() {
     });
   };
 
+  // Get unique locations for filter
+  const uniqueLocations = useMemo(() => {
+    const locations = freelancers
+      .map(f => f.location)
+      .filter((loc): loc is string => loc !== null && loc !== undefined && loc.trim() !== '');
+    return Array.from(new Set(locations)).sort();
+  }, [freelancers]);
+
+  // Filter freelancers
+  const filteredFreelancers = useMemo(() => {
+    let filtered = freelancers;
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(f => {
+        const fullName = f.full_name || `${f.first_name || ''} ${f.last_name || ''}`.trim();
+        return (
+          fullName.toLowerCase().includes(query) ||
+          f.email?.toLowerCase().includes(query) ||
+          f.professional_title?.toLowerCase().includes(query) ||
+          f.location?.toLowerCase().includes(query)
+        );
+      });
+    }
+
+    // Profile completion filter
+    if (profileCompletionFilter !== 'all') {
+      filtered = filtered.filter(f => {
+        const completion = f.profile_completion || 0;
+        switch (profileCompletionFilter) {
+          case 'high':
+            return completion >= 80;
+          case 'medium':
+            return completion >= 50 && completion < 80;
+          case 'low':
+            return completion < 50;
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Location filter
+    if (locationFilter !== 'all') {
+      filtered = filtered.filter(f => f.location === locationFilter);
+    }
+
+    return filtered;
+  }, [freelancers, searchQuery, profileCompletionFilter, locationFilter]);
+
   return (
     <AuthGuard>
       <div className="min-h-screen bg-gradient-to-b from-purple-50 via-white to-gray-50 lg:ml-64">
         <Header title="Freelancers" />
         
         <main className="max-w-7xl mx-auto px-4 lg:px-6 py-6">
+          {/* Search and Filters */}
+          <div className="mb-6 bg-white rounded-xl shadow-md border border-gray-100 p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Search */}
+              <div className="md:col-span-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search by name, email, title..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                  <svg className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Profile Completion Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Profile Completion</label>
+                <select
+                  value={profileCompletionFilter}
+                  onChange={(e) => setProfileCompletionFilter(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="all">All</option>
+                  <option value="high">High (80%+)</option>
+                  <option value="medium">Medium (50-79%)</option>
+                  <option value="low">Low (&lt;50%)</option>
+                </select>
+              </div>
+
+              {/* Location Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
+                <select
+                  value={locationFilter}
+                  onChange={(e) => setLocationFilter(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="all">All Locations</option>
+                  {uniqueLocations.map(location => (
+                    <option key={location} value={location}>{location}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Clear Filters */}
+            {(searchQuery || profileCompletionFilter !== 'all' || locationFilter !== 'all') && (
+              <div className="mt-4">
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setProfileCompletionFilter('all');
+                    setLocationFilter('all');
+                  }}
+                  className="text-sm text-purple-600 hover:text-purple-700 font-medium"
+                >
+                  Clear all filters
+                </button>
+              </div>
+            )}
+          </div>
+
           {loading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
@@ -110,7 +232,9 @@ export default function FreelancersPage() {
             <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-200">
                 <h2 className="text-xl font-bold text-gray-900">All Freelancers</h2>
-                <p className="text-sm text-gray-600 mt-1">Total: {freelancers.length}</p>
+                <p className="text-sm text-gray-600 mt-1">
+                  Showing {filteredFreelancers.length} of {freelancers.length} freelancers
+                </p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -125,14 +249,14 @@ export default function FreelancersPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {freelancers.length === 0 ? (
+                    {filteredFreelancers.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                          No freelancers found
+                          {freelancers.length === 0 ? 'No freelancers found' : 'No freelancers match your filters'}
                         </td>
                       </tr>
                     ) : (
-                      freelancers.map((freelancer) => (
+                      filteredFreelancers.map((freelancer) => (
                         <tr key={freelancer.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm font-medium text-gray-900">
