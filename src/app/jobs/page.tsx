@@ -14,6 +14,13 @@ interface JobWithApplications {
   jobTitle: string;
   company: string | null;
   status: string | null;
+  location: string | null;
+  salary: string | null;
+  jobType: string | null;
+  description: string | null;
+  deadline: string | null;
+  createdAt: string;
+  updatedAt: string;
   applications: Application[];
 }
 
